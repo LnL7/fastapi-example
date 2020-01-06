@@ -35,7 +35,7 @@ engine = sqlalchemy.create_engine(
 )
 metadata.create_all(engine)
 
-app = FastAPI()
+app = FastAPI(title="example", version=example.__version__)
 
 
 class Package(BaseModel):
