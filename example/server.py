@@ -95,33 +95,52 @@ async def retrieve_package(record_id: int) -> Dict[str, Any]:
     return await database.fetch_one(query)
 
 
-@app.post('/api/v1/package/{record_id}/activate', response_model=PackageStatus)
-async def activate_package(record_id: int) -> Dict[str, Any]:
-    """
-    Make a package active
-    """
-    query = packages.select().where(packages.c.id == record_id \
-                                    and packages.c.status == 'downloaded')
-    pkg = await database.fetch_one(query)
-    if pkg:
-        return {'status': 'activated'}
-    else:
-        raise HTTPException(412, detail="package does not exist or is still downloading")
-
-
-async def download_package(record_id: int):
+async def download_task(record_id: int):
     query = packages.select().where(packages.c.id == record_id)
     pkg = await database.fetch_one(query)
     logger.info(f'downloading {pkg.name}~{pkg.version}...')
     logger.warning('not implemented')  # WIP
     await asyncio.sleep(60)
-    query = packages.update().where(packages.c.id == record_id).values(status='downloaded')
+    query = packages.update().where(packages.c.id == record_id and \
+                                    packages.c.status == 'created'
+                                    ).values(status='downloaded')
     await database.execute(query)
+
+
+@app.post('/api/v1/package/{record_id}/download', response_model=PackageStatus)
+async def download_package(record_id: int, tasks: BackgroundTasks) -> Dict[str, Any]:
+    """
+    Schedule the download of a package
+    """
+    query = packages.select().where(packages.c.id == record_id)
+    pkg = await database.fetch_one(query)
+    if pkg:
+        if pkg.status == 'created':
+            logger.info('scheduled task for %s', record_id)
+            tasks.add_task(download_task, record_id)
+        return {'status': pkg.status}
+    else:
+        raise HTTPException(404, detail="package does not exist")
+
+
+@app.post('/api/v1/package/{record_id}/activate', response_model=PackageStatus)
+async def activate_package(record_id: int) -> Dict[str, Any]:
+    """
+    Make a package active
+    """
+    query = packages.select().where(packages.c.id == record_id and \
+                                    packages.c.status == 'downloaded')
+    pkg = await database.fetch_one(query)
+    if pkg:
+        query = packages.update().where(packages.c.id == record_id).values(status='activated')
+        await database.execute(query)
+        return {'status': 'activated'}
+    raise HTTPException(412, detail="package does not exist or is still downloading")
 
 
 
 @app.post('/api/v1/packages', response_model=Package)
-async def create_package(pkg: CreatePackage, tasks: BackgroundTasks) -> Dict[str, Any]:
+async def create_package(pkg: CreatePackage) -> Dict[str, Any]:
     """
     List all packages
     """
@@ -129,7 +148,6 @@ async def create_package(pkg: CreatePackage, tasks: BackgroundTasks) -> Dict[str
     query = packages.insert().values(**kwargs)
     try:
         record_id = await database.execute(query)
-        tasks.add_task(download_package, record_id)
         return {**kwargs, 'id': record_id}
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
