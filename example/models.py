@@ -1,9 +1,13 @@
+import hashlib
+import logging
 import os
 from typing import List
 
 import databases
 import sqlalchemy
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./example.db')
 
@@ -27,6 +31,8 @@ tokens = sqlalchemy.Table(
 
     sqlalchemy.UniqueConstraint('token'),
 )
+
+sqlalchemy.Index('idx_token', tokens.c.token)
 
 database = databases.Database(DATABASE_URL)
 
@@ -76,14 +82,35 @@ class Token(BaseModel):
     token: str
 
     @classmethod
+    def all(cls):
+        query = tokens.select()
+        return database.fetch_all(query)
+
+    @classmethod
     async def get_or_default(cls, token):
         query = tokens.count()
         count = await database.fetch_val(query)
         if count > 0:
+            logger.info('validating token %s', token)
             query = tokens.select().where(tokens.c.token == token)
             return await database.fetch_one(query)
         else:
             return {'token': 'no_tokens_active'}
+
+    @classmethod
+    async def generate(cls):
+        digest = hashlib.md5()
+        digest.update(os.urandom(16))
+        token = digest.hexdigest()
+        query = tokens.insert().values(token=token)
+        record_id = await database.execute(query)
+        return {'id': record_id, 'token': token}
+
+    @classmethod
+    def delete(cls, token):
+        query = tokens.delete().where(tokens.c.token == token)
+        return database.execute(query)
+
 
 
 def initialize(drop_all=False):

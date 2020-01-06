@@ -133,3 +133,32 @@ async def create_package(pkg: CreatePackage) -> Dict[str, Any]:
         return {**kwargs, 'id': record_id}
     except sqlite3.IntegrityError as exc:
         raise HTTPException(409, detail=str(exc))
+
+
+@app.get('/api/v1/tokens', response_model=List[Token])
+async def list_tokens() -> Dict[str, Any]:
+    """
+    Generate a new authentication token
+    """
+    return await Token.all()
+
+
+@app.post('/api/v1/tokens', response_model=Token)
+async def create_token() -> Dict[str, Any]:
+    """
+    Generates a new authentication token
+    """
+    try:
+        token = await Token.generate()
+        return token
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, detail=str(exc))
+
+
+@app.delete('/api/v1/token/{record_id}')
+async def destroy_token(record_id: int) -> Dict[str, Any]:
+    """
+    Expires an authentication token
+    """
+    await Token.delete(record_id)
+    return {}
