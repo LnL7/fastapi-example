@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 import databases
 import example
 import sqlalchemy
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./example.db')
@@ -84,12 +84,23 @@ async def list_packages() -> Dict[str, Any]:
     return await database.fetch_all(query)
 
 
+async def download_package(record_id):
+    query = packages.select().where(packages.c.id == record_id)
+    pkg = await database.fetch_one(query)
+    logger.info(f'downloading {pkg.name}~{pkg.version}...')
+    logger.warning('not implemented')  # WIP
+    query = packages.update().where(packages.c.id == record_id).values(status='downloaded')
+    await database.execute(query)
+
+
+
 @app.post('/api/v1/packages', response_model=Package)
-async def create_package(pkg: CreatePackage) -> Dict[str, Any]:
+async def create_package(pkg: CreatePackage, tasks: BackgroundTasks) -> Dict[str, Any]:
     """
     List all packages
     """
     kwargs = dict(name=pkg.name, version=pkg.version, status=DEFAULT_STATUS)
     query = packages.insert().values(**kwargs)
     record_id = await database.execute(query)
+    tasks.add_task(download_package, record_id)
     return {**kwargs, 'id': record_id}
