@@ -98,6 +98,11 @@ class Token(BaseModel):
             return {'token': 'no_tokens_active'}
 
     @classmethod
+    def replace_token(cls, record_id, token):
+        query = tokens.update().where(tokens.c.id == record_id).values(token=token)
+        return database.execute(query)
+
+    @classmethod
     async def generate(cls):
         digest = hashlib.md5()
         digest.update(os.urandom(16))
@@ -112,8 +117,8 @@ class Token(BaseModel):
         return database.execute(query)
 
     @classmethod
-    def delete(cls, token):
-        query = tokens.delete().where(tokens.c.token == token)
+    def delete(cls, record_id):
+        query = tokens.delete().where(tokens.c.id == record_id)
         return database.execute(query)
 
 
