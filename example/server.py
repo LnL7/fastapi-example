@@ -7,16 +7,31 @@ import sqlite3
 from typing import Any, Dict, List
 
 import example
-from example.models import Package, database
 from example.download import Fetcher
+from example.models import Package, Token, database
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 DEFAULT_STATUS = 'created'
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="example", version=example.__version__)
+
+
+@app.middleware('http')
+async def add_server_version(request: Request, call_next):
+    _, _, token_text = request.headers.get('Authorization', '').partition('Token ')
+    token = await Token.get_or_default(token_text)
+    if token:
+        response = await call_next(request)
+        return response
+    else:
+        return JSONResponse(status_code=401, content={
+            'detail': 'authentication token required'
+        })
 
 
 class CreatePackage(BaseModel):
@@ -117,4 +132,4 @@ async def create_package(pkg: CreatePackage) -> Dict[str, Any]:
         record_id = await Package.create(**kwargs)
         return {**kwargs, 'id': record_id}
     except sqlite3.IntegrityError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+        raise HTTPException(409, detail=str(exc))

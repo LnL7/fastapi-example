@@ -19,6 +19,15 @@ packages = sqlalchemy.Table(
     sqlalchemy.UniqueConstraint('name', 'version'),
 )
 
+tokens = sqlalchemy.Table(
+    'tokens',
+    metadata,
+    sqlalchemy.Column('id', sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column('token', sqlalchemy.String, nullable=False),
+
+    sqlalchemy.UniqueConstraint('token'),
+)
+
 database = databases.Database(DATABASE_URL)
 
 
@@ -61,6 +70,20 @@ class Package(BaseModel):
             filters = filters and packages.c.status == from_status
         query = packages.update().where(filters).values(status=new_status)
         return database.execute(query)
+
+class Token(BaseModel):
+    id: int
+    token: str
+
+    @classmethod
+    async def get_or_default(cls, token):
+        query = tokens.count()
+        count = await database.fetch_val(query)
+        if count > 0:
+            query = tokens.select().where(tokens.c.token == token)
+            return await database.fetch_one(query)
+        else:
+            return {'token': 'no_tokens_active'}
 
 
 def initialize(drop_all=False):
