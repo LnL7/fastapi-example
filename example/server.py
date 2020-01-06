@@ -1,6 +1,7 @@
 """
 Example REST API
 """
+import asyncio
 import logging
 import os
 import sqlite3
@@ -30,10 +31,10 @@ packages = sqlalchemy.Table(
 )
 
 database = databases.Database(DATABASE_URL)
-engine = sqlalchemy.create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
-metadata.create_all(engine)
+# engine = sqlalchemy.create_engine(
+#     DATABASE_URL, connect_args={"check_same_thread": False}
+# )
+# metadata.create_all(engine)
 
 app = FastAPI(title="example", version=example.__version__)
 
@@ -90,6 +91,7 @@ async def download_package(record_id):
     pkg = await database.fetch_one(query)
     logger.info(f'downloading {pkg.name}~{pkg.version}...')
     logger.warning('not implemented')  # WIP
+    await asyncio.sleep(60)
     query = packages.update().where(packages.c.id == record_id).values(status='downloaded')
     await database.execute(query)
 
