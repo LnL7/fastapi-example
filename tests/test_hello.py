@@ -2,10 +2,13 @@ import os
 os.environ['DATABASE_URL'] = 'sqlite:///./test.db'
 
 import mock
+import asyncio
 import sqlalchemy
 from example import server
 from fastapi import FastAPI
 from starlette.testclient import TestClient
+
+loop = asyncio.get_event_loop()
 
 engine = sqlalchemy.create_engine(
     server.DATABASE_URL, connect_args={"check_same_thread": False}
@@ -51,3 +54,12 @@ def test_retrieve_packages():
     assert response.json() == {
         'id': 1, 'name': 'hello', 'version': '2.10', 'status': 'created'
     }
+
+
+def test_activate_packages():
+    # TODO: async tests
+    query = server.packages.update().where(server.packages.c.id == 1).values(status='downloaded')
+    loop.run_until_complete(server.database.execute(query))
+    response = client.post('/api/v1/package/1/activate')
+    assert response.status_code == 200
+    assert response.json() == {'status': 'activated'}

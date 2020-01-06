@@ -47,6 +47,10 @@ class CreatePackage(BaseModel):
     version: str
 
 
+class PackageStatus(BaseModel):
+    status: str
+
+
 @app.on_event("startup")
 async def startup():
     await database.connect()
@@ -85,10 +89,24 @@ async def list_packages() -> Dict[str, Any]:
 @app.get('/api/v1/package/{record_id}', response_model=Package)
 async def retrieve_package(record_id: int) -> Dict[str, Any]:
     """
-    List all packages
+    Retrieve a package
     """
     query = packages.select().where(packages.c.id == record_id)
     return await database.fetch_one(query)
+
+
+@app.post('/api/v1/package/{record_id}/activate', response_model=PackageStatus)
+async def activate_package(record_id: int) -> Dict[str, Any]:
+    """
+    Make a package active
+    """
+    query = packages.select().where(packages.c.id == record_id \
+                                    and packages.c.status == 'downloaded')
+    pkg = await database.fetch_one(query)
+    if pkg:
+        return {'status': 'activated'}
+    else:
+        raise HTTPException(412, detail="package does not exist or is still downloading")
 
 
 async def download_package(record_id: int):
