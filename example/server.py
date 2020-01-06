@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 import example
 from example.download import Fetcher
 from example.models import Package, Token, database
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -23,8 +23,8 @@ app = FastAPI(title="example", version=example.__version__)
 
 @app.middleware('http')
 async def add_server_version(request: Request, call_next):
-    _, _, token_text = request.headers.get('Authorization', '').partition('Token ')
-    token = await Token.get_or_default(token_text)
+    token = await Token.get_or_default(get_current_token(request))
+    request
     if token:
         response = await call_next(request)
         return response
@@ -32,6 +32,11 @@ async def add_server_version(request: Request, call_next):
         return JSONResponse(status_code=401, content={
             'detail': 'authentication token required'
         })
+
+
+def get_current_token(request: Request):
+    _, _, token = request.headers.get('Authorization', '').partition('Token ')
+    return token
 
 
 class CreatePackage(BaseModel):
@@ -153,6 +158,16 @@ async def create_token() -> Dict[str, Any]:
         return token
     except sqlite3.IntegrityError as exc:
         raise HTTPException(409, detail=str(exc))
+
+
+@app.delete('/api/v1/tokens/all')
+async def reset_all_tokens(token: str = Depends(get_current_token)) -> Dict[str, Any]:
+    """
+    Expires all tokens except for the one currently used
+    """
+    # Tokens should really be split up into root and api tokens.
+    await Token.delete_all_except(token)
+    return {}
 
 
 @app.delete('/api/v1/token/{record_id}')

@@ -107,6 +107,11 @@ class Token(BaseModel):
         return {'id': record_id, 'token': token}
 
     @classmethod
+    def delete_all_except(cls, token):
+        query = tokens.delete().where(tokens.c.token != token)
+        return database.execute(query)
+
+    @classmethod
     def delete(cls, token):
         query = tokens.delete().where(tokens.c.token == token)
         return database.execute(query)
