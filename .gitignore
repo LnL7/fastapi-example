@@ -1,1 +1,5 @@
+*.db
+*.egg-info
 __pycache__
+inst
+venv

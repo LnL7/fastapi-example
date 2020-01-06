@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 import example
 from example.download import Fetcher
-from example.models import Package, Token, database
+from example.models import Package, Token, database, initialize
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from starlette.requests import Request
@@ -50,6 +50,7 @@ class PackageStatus(BaseModel):
 
 @app.on_event("startup")
 async def startup():
+    initialize()
     await database.connect()
 
 
