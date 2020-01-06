@@ -3,12 +3,13 @@ Example REST API
 """
 import logging
 import os
+import sqlite3
 from typing import Any, Dict, List
 
 import databases
 import example
 import sqlalchemy
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./example.db')
@@ -101,6 +102,9 @@ async def create_package(pkg: CreatePackage, tasks: BackgroundTasks) -> Dict[str
     """
     kwargs = dict(name=pkg.name, version=pkg.version, status=DEFAULT_STATUS)
     query = packages.insert().values(**kwargs)
-    record_id = await database.execute(query)
-    tasks.add_task(download_package, record_id)
-    return {**kwargs, 'id': record_id}
+    try:
+        record_id = await database.execute(query)
+        tasks.add_task(download_package, record_id)
+        return {**kwargs, 'id': record_id}
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
