@@ -4,21 +4,19 @@ import os
 import example
 import mock
 import sqlalchemy
-from example.server import DATABASE_URL, app, database, metadata, packages
+from example.models import DATABASE_URL, Package, initialize
+from example.server import app
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 os.environ['DATABASE_URL'] = 'sqlite:///./test.db'
 
 
+# FIXME: do this before each test to prevent state?
+initialize(drop_all=True)
+
 loop = asyncio.get_event_loop()
 
-engine = sqlalchemy.create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
-
-metadata.drop_all(engine)  # FIXME: do this before each test to prevent state?
-metadata.create_all(engine)
 client = TestClient(app)
 
 
@@ -65,8 +63,9 @@ def test_download_package():
 
 
 def test_download_package_doesnt_redownload():
-    query = packages.update().where(packages.c.id == 1).values(status='downloaded')
-    loop.run_until_complete(database.execute(query)) # TODO: async tests
+    loop.run_until_complete(
+        Package.update_one(1, status='downloaded')
+    ) # TODO: async tests
     with mock.patch.object(example.server, 'download_task', return_value=None) as task:
         response = client.post('/api/v1/package/1/download')
     assert response.status_code == 200

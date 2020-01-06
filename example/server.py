@@ -3,43 +3,19 @@ Example REST API
 """
 import asyncio
 import logging
-import os
 import sqlite3
 from typing import Any, Dict, List
 
-import databases
 import example
-import sqlalchemy
+from example.models import Package, database
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
-DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./example.db')
 DEFAULT_STATUS = 'created'
 
 logger = logging.getLogger(__name__)
 
-metadata = sqlalchemy.MetaData()
-packages = sqlalchemy.Table(
-    'packages',
-    metadata,
-    sqlalchemy.Column('id', sqlalchemy.Integer, primary_key=True),
-    sqlalchemy.Column('name', sqlalchemy.String, nullable=False),
-    sqlalchemy.Column('version', sqlalchemy.String, nullable=False),
-    sqlalchemy.Column('status', sqlalchemy.String, nullable=False),
-
-    sqlalchemy.UniqueConstraint('name', 'version'),
-)
-
-database = databases.Database(DATABASE_URL)
-
 app = FastAPI(title="example", version=example.__version__)
-
-
-class Package(BaseModel):
-    id: int
-    name: str
-    version: str
-    status: str
 
 
 class CreatePackage(BaseModel):
@@ -82,8 +58,7 @@ async def list_packages() -> Dict[str, Any]:
     """
     List all packages
     """
-    query = packages.select()
-    return await database.fetch_all(query)
+    return await Package.all()
 
 
 @app.get('/api/v1/package/{record_id}', response_model=Package)
@@ -91,20 +66,16 @@ async def retrieve_package(record_id: int) -> Dict[str, Any]:
     """
     Retrieve a package
     """
-    query = packages.select().where(packages.c.id == record_id)
-    return await database.fetch_one(query)
+    return await Package.get(record_id)
 
 
 async def download_task(record_id: int):
-    query = packages.select().where(packages.c.id == record_id)
-    pkg = await database.fetch_one(query)
+    pkg = await Package.get(record_id)
     logger.info(f'downloading {pkg.name}~{pkg.version}...')
     logger.warning('not implemented')  # WIP
     await asyncio.sleep(60)
-    query = packages.update().where(packages.c.id == record_id and \
-                                    packages.c.status == 'created'
-                                    ).values(status='downloaded')
-    await database.execute(query)
+    await Package.update_status(record_id, 'downloaded',
+                                from_status='created')
 
 
 @app.post('/api/v1/package/{record_id}/download', response_model=PackageStatus)
@@ -112,8 +83,7 @@ async def download_package(record_id: int, tasks: BackgroundTasks) -> Dict[str, 
     """
     Schedule the download of a package
     """
-    query = packages.select().where(packages.c.id == record_id)
-    pkg = await database.fetch_one(query)
+    pkg = await Package.get(record_id)
     if pkg:
         if pkg.status == 'created':
             logger.info('scheduled task for %s', record_id)
@@ -128,15 +98,11 @@ async def activate_package(record_id: int) -> Dict[str, Any]:
     """
     Make a package active
     """
-    query = packages.select().where(packages.c.id == record_id and \
-                                    packages.c.status == 'downloaded')
-    pkg = await database.fetch_one(query)
+    pkg = await Package.get_with_status(record_id, 'downloaded')
     if pkg:
-        query = packages.update().where(packages.c.id == record_id).values(status='activated')
-        await database.execute(query)
+        await Package.update_status(record_id, 'activated', from_status='downladed')
         return {'status': 'activated'}
     raise HTTPException(412, detail="package does not exist or is still downloading")
-
 
 
 @app.post('/api/v1/packages', response_model=Package)
@@ -145,9 +111,8 @@ async def create_package(pkg: CreatePackage) -> Dict[str, Any]:
     List all packages
     """
     kwargs = dict(name=pkg.name, version=pkg.version, status=DEFAULT_STATUS)
-    query = packages.insert().values(**kwargs)
     try:
-        record_id = await database.execute(query)
+        record_id = await Package.create(**kwargs)
         return {**kwargs, 'id': record_id}
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
