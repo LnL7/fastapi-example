@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 import example
 from example.models import Package, database
+from example.download import Fetcher
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -71,11 +72,12 @@ async def retrieve_package(record_id: int) -> Dict[str, Any]:
 
 async def download_task(record_id: int):
     pkg = await Package.get(record_id)
-    logger.info(f'downloading {pkg.name}~{pkg.version}...')
-    logger.warning('not implemented')  # WIP
-    await asyncio.sleep(60)
-    await Package.update_status(record_id, 'downloaded',
-                                from_status='created')
+    await Fetcher.download(pkg.name, pkg.version)
+    try:
+        await Package.update_status(record_id, 'downloaded',
+                                    from_status='created')
+    except Exception as exc:
+        logger.error('download failed: %s', exc)
 
 
 @app.post('/api/v1/package/{record_id}/download', response_model=PackageStatus)
