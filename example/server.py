@@ -82,7 +82,16 @@ async def list_packages() -> Dict[str, Any]:
     return await database.fetch_all(query)
 
 
-async def download_package(record_id):
+@app.get('/api/v1/package/{record_id}', response_model=Package)
+async def retrieve_package(record_id: int) -> Dict[str, Any]:
+    """
+    List all packages
+    """
+    query = packages.select().where(packages.c.id == record_id)
+    return await database.fetch_one(query)
+
+
+async def download_package(record_id: int):
     query = packages.select().where(packages.c.id == record_id)
     pkg = await database.fetch_one(query)
     logger.info(f'downloading {pkg.name}~{pkg.version}...')
